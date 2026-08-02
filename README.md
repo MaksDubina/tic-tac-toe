@@ -1,111 +1,144 @@
-# Project Backend 05 — Go_Bootcamp
+# Tic-Tac-Toe API
 
-**Summary:** In this project, you will learn how to work with JWT-based authorization and extend the functionality of your Go web application using the net/http package.
+REST API для игры в крестики-нолики, написанный на Go.
 
-💡 [Click here](https://new.oprosso.net/p/4cb31ec3f47a4596bc758ea1861fb624) to give us feedback on this project. It’s anonymous and will help our team improve the learning experience. We recommend completing the survey right after finishing the project.
+## Стек технологий
 
-## Table of Contents
+- **Go** — язык разработки
+- **PostgreSQL** — база данных
+- **uber-fx** — dependency injection
+- **net/http** — HTTP-сервер
+- **JWT** — аутентификация
+- **Swagger (swaggo)** — документация API
 
-  - [Chapter I](#chapter-i)
-    - [Instructions](#instructions)
-  - [Chapter II](#chapter-ii)
-    - [General Information](#general-information)
-  - [Chapter III](#chapter-iii)
-    - [Project: Tic-Tac-Toe](#project-tic-tac-toe)
-    - [Task 1: Replace Basic Authorization with JWT](#task-1-replace-basic-authorization-with-jwt)
-    - [Task 2: Game History Support](#task-2-game-history-support)
-    - [Task 3: Leaderboard Support](#task-3-leaderboard-support)
+## Возможности
 
-## Chapter I
+**Auth**
+- Регистрация нового пользователя — `POST /auth/signup`
+- Авторизация пользователя (вход) — `POST /auth/signin`
+- Обновление access-токена — `POST /auth/refresh-access`
+- Полное обновление пары токенов (ротация) — `POST /auth/refresh-token`
 
-### Instructions
+**Game**
+- Создание новой игровой комнаты — `POST /game`
+- Получение информации о конкретной игре — `GET /game/{current_game_UUID}`
+- Совершение хода в игре — `POST /game/{current_game_UUID}`
+- Присоединение к существующей игре — `POST /game/{current_game_UUID}/join`
+- Получение списка доступных игр — `GET /games/available`
+- Получение истории завершённых игр пользователя — `GET /games/history`
+- Получение таблицы лидеров — `GET /games/leaderboard`
 
-1. Throughout this course, you will often feel uncertain and experience a lack of information — that’s normal. Don’t forget that the repository and Google are always at your disposal. So are your peers and Rocket.Chat. Communicate. Search. Use common sense. Don’t be afraid to make mistakes.
-2. Be mindful of your information sources. Double-check. Think. Analyze. Compare.
-3. Read the assignment carefully. Then read it again.
-4. Read the examples carefully as well. They may contain important details that aren’t explicitly stated in the instructions.
-5. You may encounter inconsistencies — something new in the task or example might contradict what you’ve already seen. If that happens, try to figure it out. If you can’t, write your question down under “Open Questions” and try to resolve it during the process. Don’t leave open questions unanswered.
-6. If the task seems unclear or unachievable — it only seems that way. Try breaking it down. Most likely, individual parts will become clearer.
-7. You’ll encounter various types of tasks. Those marked with an asterisk (\*) are optional and more advanced. They’re not required, but completing them will give you extra experience and knowledge.
-8. Don’t try to cheat the system or others. You’ll only be cheating yourself.
-9. Have a question? Ask the person to your right. If that doesn’t help, ask the one to your left.
-10. When receiving help, always make sure you understand the what, how, and why. Otherwise, the help won’t be meaningful.
-11. Always push your changes to the develop branch only! The master branch will be ignored. Work in the src directory.
-12. Your directory should contain only those files specified in the assignment.
+**User**
+- Получение информации о текущем пользователе — `GET /user/me`
+- Получение информации о пользователе по UUID — `GET /users/{user_uuid}`
 
-## Chapter II
+## Требования
 
-### General Information
+- Go 1.2x+
+- PostgreSQL (запущенный локально или доступный по сети)
 
-**Token, Session Token, Refresh Token**
+## Установка и запуск
 
-A **token** is a unique string of characters that replaces the user’s login and password to prevent leakage of confidential information. Tokens have a limited lifespan after which they become invalid.
+### 1. Клонируйте репозиторий
 
-A **session token** grants the user rights to perform actions available to them during a session. It is reusable and has a short expiration time.
+```bash
+git clone https://github.com/MaksDubina/tic-tac-toe.git
+cd tic-tac-toe
+```
 
-A **refresh token** extends the validity period of a session token. It is single-use and has a long expiration time.
+### 2. Создайте файл окружения
 
-**Topics to study:**
+Переменные окружения не хранятся в репозитории из соображений безопасности. Создайте файл `.env` в корне проекта на основе примера ниже:
 
-- Web applications
-- JWT authorization
-- PostgreSQL
-- net/http
+```bash
+touch .env
+```
 
-## Chapter III
+и заполните его своими значениями:
 
-### Project: Tic-Tac-Toe
+```env
+# Сервер
+SERVER_PORT=8080
 
-Use the server-side project from the previous week, **T04**.
+# База данных
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=your_password
+DB_NAME=tictactoe
 
-### Task 1: Replace Basic Authorization with JWT
+# JWT
+JWT_SECRET=your_secret_key
+JWT_ACCESS_SECRET=your_secret_key
+```
 
-- Create a JwtRequest model containing login and password.
-- Create a JwtResponse model containing type, accessToken, and refreshToken.
-- Create a RefreshJwtRequest model containing refreshToken.
-- Implement a JwtProvider structure with the following methods:
-  - A method to generate an accessToken based on a User; the token must include the user’s UUID.
-  - A method to generate a refreshToken based on a User; the token must include the user’s UUID.
-  - A method to validate the accessToken.
-  - A method to validate the refreshToken.
-  - A method to extract the UUID from a token.
-- Update the **authorization service**, which uses UserService and JwtProvider, to include:
-  - A modified authorization method that now accepts a JwtRequest and returns a JwtResponse.
-  - A method to refresh the accessToken, which accepts a refreshToken and returns a JwtResponse.
-  - A method to refresh the refreshToken, which accepts a refreshToken and returns a JwtResponse.
-- Update the **authorization controller**:
-  - Add or modify endpoints for:
-    - user authorization
-    - accessToken refresh
-    - refreshToken refresh
-- Change the logic for determining the authorized user:
-  - Extract the token from the Authorization header, which contains Bearer {accessToken}.
-  - Use JwtProvider to validate the token.
-  - Set the authorization using the sign method of the JWT extension for Request.
-  - Remove Basic Authorization from Authentication.
-  - Add Bearer Authorization to Authentication.
-  - Use JwtProvider to validate the token.
-  - If validation fails, respond with status code 401 and do not execute the request.
-  - Allow unauthenticated access to the accessToken refresh endpoint.
-  - Add an endpoint to retrieve user info based on the accessToken.
+### 3. Запустите проект
 
-### Task 2: Game History Support
+Всё поднимается одной командой через Makefile — она сама поднимет PostgreSQL в Docker и запустит приложение:
 
-- Add a creation date field to the game model.
-- Define a database query that retrieves all completed games by user UUID.
-- A game is considered completed if it has one of the following states:
-  - Victory of the player with UUID;
-  - Draw.
-- In the game service, add a method that retrieves all completed games by the user’s UUID.
-- Add an endpoint to retrieve all completed games based on the accessToken, accessible only to authorized users.
+```bash
+make run
+```
 
-### Task 3: Leaderboard Support
+## Swagger-документация
 
-- Create a model for information about won games, containing the user's UUID and their win ratio.
-- Define a database query that:
-  - Calculates the ratio of the number of wins to losses and draws for each user.
-  - Sorts the win ratios in descending order.
-  - Selects the top N records, each containing the user's UUID and win ratio.
-- In the game service, add a method to retrieve the top N players.
-- Add an endpoint that accepts N (number of top players) and returns a list of the best players (UUID and login) with their win ratios.
-- The endpoint for retrieving top players must be accessible only to authorized users.
+После запуска сервера документация API доступна автоматически по адресу:
+
+```
+http://localhost:8080/swagger/index.html#/
+```
+
+Через Swagger UI можно посмотреть все доступные эндпоинты, модели запросов/ответов и протестировать API прямо в браузере.
+
+## Структура проекта
+
+```
+tic-tac-toe/
+│
+├── src/
+│   ├── cmd/
+│   │   └── main.go         # точка входа в приложение
+│   ├── docs/               #  Swagger документация
+│   │   ├── docs.go         
+│   │   ├── swagger.json
+│   │   └── swagger.yaml
+│   └── internal/
+│       ├── api/            # хендлеры, middleware, модели запросов
+│       │   ├── auth_handler.go
+│       │   ├── auth_model.go
+│       │   ├── handler.go
+│       │   ├── interface.go
+│       │   ├── jwt_extention.go
+│       │   ├── mapper.go
+│       │   ├── middleware.go
+│       │   └── model.go
+│       ├── app/             # бизнес-логика / сервисный слой
+│       │   ├── auth_service.go
+│       │   ├── interface.go
+│       │   └── service.go
+│       ├── config/
+│       │   └── config.go
+│       ├── di/              # dependency injection (uber-fx) и миграции БД
+│       │   ├── migrations/
+│       │   └── di.go
+│       ├── domain/          # доменные модели
+│       │   ├── game.go
+│       │   ├── jwt_model.go
+│       │   ├── model.go
+│       │   └── user.go
+│       └── infra/           # инфраструктурный слой (Postgresql)
+|           ├── connection.go
+│           ├── jwt_provider.go
+│           ├── mapper.go
+│           ├── model.go
+│           ├── repository.go
+│           ├── user_models.go
+│           └── user_repository.go
+│
+├── go.mod
+├── README.md
+├── makefile
+├── .env
+└── docker-compose.yaml
+
+```
