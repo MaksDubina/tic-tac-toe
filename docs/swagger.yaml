@@ -1,0 +1,460 @@
+definitions:
+  api.AuthResponse:
+    properties:
+      error:
+        type: string
+      success:
+        type: boolean
+      user_id:
+        type: string
+    type: object
+  api.CreateGameRequest:
+    properties:
+      opponent_type:
+        type: string
+    type: object
+  api.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  api.GameRequest:
+    properties:
+      board:
+        items:
+          items:
+            type: integer
+          type: array
+        type: array
+    type: object
+  api.GameResponse:
+    properties:
+      board:
+        items:
+          items:
+            type: integer
+          type: array
+        type: array
+      game_status:
+        type: string
+      id:
+        type: string
+      player_o_id:
+        type: string
+      player_x_id:
+        type: string
+    type: object
+  api.SignUpRequest:
+    properties:
+      login:
+        type: string
+      password:
+        type: string
+    type: object
+  api.UserResponse:
+    properties:
+      login:
+        type: string
+      user_id:
+        type: string
+    type: object
+  domain.JwtRequest:
+    properties:
+      login:
+        type: string
+      password:
+        type: string
+    type: object
+  domain.JwtResponse:
+    properties:
+      accessToken:
+        type: string
+      refreshToken:
+        type: string
+      type:
+        description: Обычно "Bearer"
+        type: string
+    type: object
+  domain.RefreshJwtRequest:
+    properties:
+      refreshToken:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /auth/refresh-access:
+    post:
+      consumes:
+      - application/json
+      description: Принимает refreshToken и возвращает новый accessToken БЕЗ изменения
+        сессии рефреша. Доступен без авторизации.
+      parameters:
+      - description: Действующий Refresh токен
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/domain.RefreshJwtRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Новый access токен
+          schema:
+            $ref: '#/definitions/domain.JwtResponse'
+        "400":
+          description: Некорректный формат JSON
+          schema:
+            $ref: '#/definitions/api.AuthResponse'
+        "401":
+          description: Невалидный или просроченный токен
+          schema:
+            $ref: '#/definitions/api.AuthResponse'
+      summary: Обновление Access токена
+      tags:
+      - auth
+  /auth/refresh-token:
+    post:
+      consumes:
+      - application/json
+      description: Принимает refreshToken, инвалидирует его и возвращает полностью
+        новую пару Access и Refresh токенов.
+      parameters:
+      - description: Действующий Refresh токен
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/domain.RefreshJwtRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Новая пара токенов
+          schema:
+            $ref: '#/definitions/domain.JwtResponse'
+        "400":
+          description: Некорректный формат JSON
+          schema:
+            $ref: '#/definitions/api.AuthResponse'
+        "401":
+          description: Невалидный или просроченный токен
+          schema:
+            $ref: '#/definitions/api.AuthResponse'
+      summary: Полное обновление пары токенов (Ротация)
+      tags:
+      - auth
+  /auth/signin:
+    post:
+      consumes:
+      - application/json
+      description: Проверяет учетные данные пользователя (логин/пароль) и возвращает
+        пару JWT токенов.
+      parameters:
+      - description: Данные для входа
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/domain.JwtRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешный вход, возвращает токены
+          schema:
+            $ref: '#/definitions/domain.JwtResponse'
+        "400":
+          description: Некорректный формат JSON
+          schema:
+            $ref: '#/definitions/api.AuthResponse'
+        "401":
+          description: Неверный логин или пароль
+          schema:
+            $ref: '#/definitions/api.AuthResponse'
+      summary: Авторизация пользователя (Вход)
+      tags:
+      - auth
+  /auth/signup:
+    post:
+      consumes:
+      - application/json
+      description: Создает новый аккаунт и сразу возвращает JWT-токены для авторизации.
+      parameters:
+      - description: Данные для регистрации (логин и пароль)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.SignUpRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Успешная регистрация
+          schema:
+            $ref: '#/definitions/domain.JwtResponse'
+        "400":
+          description: Некорректное тело запроса (невалидный JSON)
+          schema:
+            $ref: '#/definitions/api.AuthResponse'
+        "422":
+          description: Ошибка бизнес-валидации (пользователь уже существует, слишком
+            короткий пароль)
+          schema:
+            $ref: '#/definitions/api.AuthResponse'
+      summary: Регистрация нового пользователя
+      tags:
+      - auth
+  /game:
+    post:
+      consumes:
+      - application/json
+      description: Инициализирует новую игру 3х3 с выбором оппонента (ИИ или человек).
+        Требует авторизацию.
+      parameters:
+      - description: Принимает строку ai или human
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.CreateGameRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.GameResponse'
+        "400":
+          description: Неверный формат тела запроса или невалидный opponent_type
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера при сохранении в БД
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - jwtAuth: []
+      summary: Создание новой игровой комнаты
+      tags:
+      - game
+  /game/{current_game_UUID}:
+    get:
+      description: Возвращает текущее состояние игровой сессии (доску, статус, ID
+        игроков) по её UUID.
+      parameters:
+      - description: UUID игровой сессии
+        in: path
+        name: current_game_UUID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.GameResponse'
+        "400":
+          description: Неверный формат UUID
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Игровая сессия не найдена
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - jwtAuth: []
+      summary: Получение информации о конкретной игре
+      tags:
+      - game
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Принимает новое состояние игрового поля от авторизованного пользователя.
+        Проверяет очередность хода, валидирует корректность изменения клеток.
+        Если оппонент — ИИ, то сервер автоматически рассчитывает и совершает ответный ход.
+      parameters:
+      - description: UUID игровой сессии
+        in: path
+        name: current_game_UUID
+        required: true
+        type: string
+      - description: Новое состояние игрового поля
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.GameRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Ход успешно принят (и выполнен ответный ход ИИ, если применимо)
+          schema:
+            $ref: '#/definitions/api.GameResponse'
+        "400":
+          description: Неверный формат UUID, сломанный JSON, игра окончена или еще
+            не началась
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Ход не в свою очередь или пользователь не является участником
+            этой игры
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Игровая сессия не найдена в базе данных
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Ошибка валидации доски (изменено более 1 клетки, затерты чужие
+            фигуры)
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера при расчетах ИИ или сохранении в
+            БД
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - jwtAuth: []
+      summary: Совершение хода в игре
+      tags:
+      - game
+  /game/{current_game_UUID}/join:
+    post:
+      description: Позволяет авторизованному пользователю занять свободное место (Нолика)
+        в комнате со статусом ожидания.
+      parameters:
+      - description: UUID игровой сессии
+        in: path
+        name: current_game_UUID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешное подключение, статус игры изменен на PlayerXTurn
+          schema:
+            $ref: '#/definitions/api.GameResponse'
+        "400":
+          description: Неверный формат UUID или бизнес-ошибка (комната заполнена,
+            попытка войти в свою комнату)
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - jwtAuth: []
+      summary: Присоединение к существующей игре
+      tags:
+      - game
+  /games/available:
+    get:
+      description: Возвращает список всех созданных игровых комнат, находящихся в
+        статусе ожидания второго игрока (WaitingForPlayers).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список доступных комнат (может быть пустым [])
+          schema:
+            items:
+              $ref: '#/definitions/api.GameResponse'
+            type: array
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера при запросе к БД
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - jwtAuth: []
+      summary: Получение списка доступных игр
+      tags:
+      - game
+  /user/me:
+    get:
+      description: Возвращает профиль пользователя, извлекая UUID из проверенного
+        accessToken в заголовке Authorization.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные профиля авторизованного пользователя
+          schema:
+            $ref: '#/definitions/api.UserResponse'
+        "401":
+          description: Токен отсутствует, невалиден или просрочен
+          schema:
+            $ref: '#/definitions/api.AuthResponse'
+        "404":
+          description: Пользователь с таким UUID не найден в БД
+          schema:
+            $ref: '#/definitions/api.AuthResponse'
+      security:
+      - BearerAuth: []
+      summary: Получение информации о текущем пользователе
+      tags:
+      - user
+  /users/{user_uuid}:
+    get:
+      description: Возвращает публичный профиль пользователя (ID и логин) по его UUID.
+      parameters:
+      - description: UUID пользователя
+        in: path
+        name: user_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.UserResponse'
+        "400":
+          description: Неверный формат UUID
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Пользователь не найден
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - jwtAuth: []
+      summary: Получение информации о пользователе
+      tags:
+      - user
+securityDefinitions:
+  BearerAuth:
+    description: 'Введите токен в формате: Bearer {accessToken}'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
