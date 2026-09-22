@@ -10,6 +10,10 @@ REST API для игры в крестики-нолики, написанный 
 - **net/http** — HTTP-сервер
 - **JWT** — аутентификация
 - **Swagger (swaggo)** — документация API
+- **Docker / Docker Compose** — контейнеризация приложения и всей инфраструктуры
+- **Prometheus** — сбор метрик приложения
+- **Grafana** — визуализация метрик и логов, дашборды
+- **Loki + Promtail** — централизованный сбор и просмотр логов контейнеров
 
 ## Возможности
 
@@ -31,6 +35,20 @@ REST API для игры в крестики-нолики, написанный 
 **User**
 - Получение информации о текущем пользователе — `GET /user/me`
 - Получение информации о пользователе по UUID — `GET /users/{user_uuid}`
+
+**Observability**
+- Метрики приложения в формате Prometheus — `GET /metrics`
+
+## Мониторинг и наблюдаемость
+
+Приложение инструментировано метриками Prometheus на двух уровнях:
+
+- **Технические метрики** (через middleware): `http_requests_total`, `http_request_duration_seconds` — количество и латентность HTTP-запросов в разрезе метода, пути и статус-кода.
+- **Бизнес-метрики** (в хендлерах): `games_created_total`, `games_active`, `moves_total`, `auth_attempts_total` — количество созданных/активных игр, совершённых ходов, попыток регистрации и входа (с разбивкой success/failure).
+
+Логи контейнеров собираются Promtail и отправляются в Loki, откуда доступны для просмотра и поиска через Grafana.
+
+Grafana поднимается с уже готовым datasource (Prometheus + Loki) и дашбордом через provisioning — заходить и настраивать вручную не требуется.
 
 ## Требования
 
@@ -61,7 +79,7 @@ touch .env
 SERVER_PORT=8080
 
 # База данных
-DB_HOST=localhost
+DB_HOST=postgres
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=your_password
@@ -72,23 +90,28 @@ JWT_SECRET=your_secret_key
 JWT_ACCESS_SECRET=your_secret_key
 ```
 
+> **Важно:** `DB_HOST` должен быть `postgres` (имя сервиса в docker-compose), а не `localhost` — приложение теперь тоже запускается в контейнере и обращается к базе данных по внутренней docker-сети.
+
 ### 3. Запустите проект
 
-Всё поднимается одной командой через Makefile — она сама поднимет PostgreSQL в Docker и запустит приложение:
+Весь стек — приложение, база данных, Prometheus, Grafana, Loki и Promtail — поднимается одной командой:
 
 ```bash
-make run
+docker compose up --build
 ```
 
-## Swagger-документация
+При первом запуске Docker соберёт образ приложения и подтянет остальные образы — это может занять несколько минут.
 
-После запуска сервера документация API доступна автоматически по адресу:
+## Доступные интерфейсы после запуска
 
-```
-http://localhost:8080/swagger/index.html#/
-```
-
-Через Swagger UI можно посмотреть все доступные эндпоинты, модели запросов/ответов и протестировать API прямо в браузере.
+| Сервис | Адрес | Назначение |
+|---|---|---|
+| API | http://localhost:8080 | Основные эндпоинты приложения |
+| Swagger UI | http://localhost:8080/swagger/index.html#/ | Документация и тестирование API |
+| Метрики (Prometheus формат) | http://localhost:8080/metrics | Сырые метрики приложения |
+| Prometheus | http://localhost:9090 | Просмотр и запросы метрик (PromQL) |
+| Grafana | http://localhost:3000 | Дашборды и визуализация (логин/пароль: `admin` / `admin`) |
+| Loki | http://localhost:3100 | API логов (используется через Grafana, напрямую обычно не нужен) |
 
 ## Структура проекта
 
@@ -97,13 +120,13 @@ tic-tac-toe/
 │
 ├── src/
 │   ├── cmd/
-│   │   └── main.go         # точка входа в приложение
-│   ├── docs/               #  Swagger документация
-│   │   ├── docs.go         
+│   │   └── main.go              # точка входа в приложение
+│   ├── docs/                    # Swagger документация
+│   │   ├── docs.go
 │   │   ├── swagger.json
 │   │   └── swagger.yaml
 │   └── internal/
-│       ├── api/            # хендлеры, middleware, модели запросов
+│       ├── api/                 # хендлеры, middleware, модели запросов
 │       │   ├── auth_handler.go
 │       │   ├── auth_model.go
 │       │   ├── handler.go
@@ -112,33 +135,51 @@ tic-tac-toe/
 │       │   ├── mapper.go
 │       │   ├── middleware.go
 │       │   └── model.go
-│       ├── app/             # бизнес-логика / сервисный слой
+│       ├── app/                 # бизнес-логика / сервисный слой
 │       │   ├── auth_service.go
 │       │   ├── interface.go
 │       │   └── service.go
 │       ├── config/
 │       │   └── config.go
-│       ├── di/              # dependency injection (uber-fx) и миграции БД
+│       ├── di/                  # dependency injection (uber-fx) и миграции БД
 │       │   ├── migrations/
 │       │   └── di.go
-│       ├── domain/          # доменные модели
+│       ├── domain/              # доменные модели
 │       │   ├── game.go
 │       │   ├── jwt_model.go
 │       │   ├── model.go
 │       │   └── user.go
-│       └── infra/           # инфраструктурный слой (Postgresql)
-|           ├── connection.go
-│           ├── jwt_provider.go
-│           ├── mapper.go
-│           ├── model.go
-│           ├── repository.go
-│           ├── user_models.go
-│           └── user_repository.go
+│       ├── infra/               # инфраструктурный слой (PostgreSQL)
+│       │   ├── connection.go
+│       │   ├── jwt_provider.go
+│       │   ├── mapper.go
+│       │   ├── model.go
+│       │   ├── repository.go
+│       │   ├── user_models.go
+│       │   └── user_repository.go
+│       └── metrics/             # регистрация и определения метрик Prometheus
+│           └── metrics.go
 │
+├── prometheus/
+│   └── prometheus.yml           # конфиг scrape-таргетов Prometheus
+│
+├── loki/
+│   └── loki-config.yml          # конфиг хранилища и лимитов Loki
+│
+├── promtail/
+│   └── promtail-config.yml      # конфиг сбора логов Docker-контейнеров
+│
+├── grafana/
+│   └── provisioning/
+│       ├── datasources/
+│       │   └── datasources.yml  # автоподключение Prometheus и Loki
+│       └── dashboards/
+│           └── dashboards.yml   # автозагрузка дашбордов из файлов
+│
+├── Dockerfile                   # сборка образа приложения
+├── docker-compose.yaml          # весь стек: app, postgres, prometheus, grafana, loki, promtail
 ├── go.mod
 ├── README.md
 ├── makefile
-├── .env
-└── docker-compose.yaml
-
+└── .env
 ```
