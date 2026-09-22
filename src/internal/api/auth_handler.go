@@ -3,19 +3,22 @@ package api
 import (
 	"encoding/json"
 	"jwtAuth/src/internal/domain"
+	"jwtAuth/src/internal/metrics"
 	"net/http"
 )
 
 type AuthHandler struct {
 	authService AuthService
 	jwtExt      JwtRequestExtension
+	metrics     *metrics.Metrics
 }
 
-func NewAuthHandler(as AuthService) *AuthHandler {
+func NewAuthHandler(as AuthService, m *metrics.Metrics) *AuthHandler {
 
 	return &AuthHandler{
 		authService: as,
 		jwtExt:      JwtRequestExtension{},
+		metrics:     m,
 	}
 }
 
@@ -42,6 +45,8 @@ func (h *AuthHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		h.sendJSON(w, http.StatusUnprocessableEntity, AuthResponse{Error: err.Error()})
 		return
 	}
+
+	h.metrics.AuthAttemptsTotal.WithLabelValues("signup", "success").Inc()
 
 	h.sendJSON(w, http.StatusCreated, AuthResponse{Success: success})
 }
@@ -74,6 +79,8 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
+
+	h.metrics.AuthAttemptsTotal.WithLabelValues("signin", "success").Inc()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(JwtResponse)

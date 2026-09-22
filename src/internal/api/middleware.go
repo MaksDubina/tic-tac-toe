@@ -1,8 +1,11 @@
 package api
 
 import (
+	"jwtAuth/src/internal/metrics"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type UserAuthenticator struct {
@@ -55,4 +58,30 @@ func (a *UserAuthenticator) Wrap(next http.HandlerFunc) http.HandlerFunc {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func MetricsMiddleware(m *metrics.Metrics) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			ww := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+
+			next.ServeHTTP(ww, r)
+
+			duration := time.Since(start).Seconds()
+			m.HTTPRequestDuration.WithLabelValues(r.Method, r.URL.Path).Observe(duration)
+			m.HTTPRequestsTotal.WithLabelValues(r.Method, r.URL.Path, strconv.Itoa(ww.status)).Inc()
+		})
+	}
+}
+
+// statusRecorder нужен, чтобы перехватить статус-код ответа
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
 }

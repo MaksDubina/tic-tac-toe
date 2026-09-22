@@ -8,12 +8,14 @@ import (
 	"jwtAuth/src/internal/app"
 	"jwtAuth/src/internal/config"
 	"jwtAuth/src/internal/infra"
+	"jwtAuth/src/internal/metrics"
 	"net/http"
 
 	_ "jwtAuth/src/docs"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/fx"
 )
@@ -79,6 +81,7 @@ var Module = fx.Options(
 		api.NewAuthHandler,
 		api.NewUserAuthenticator,
 	),
+	fx.Provide(metrics.New),
 	fx.Invoke(RunMigrations, StartHTTPServer),
 )
 
@@ -98,7 +101,7 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func StartHTTPServer(lc fx.Lifecycle, gameHandler *api.GameHandler, authHandler *api.AuthHandler,
-	authenticator *api.UserAuthenticator, pool *pgxpool.Pool) *http.Server {
+	authenticator *api.UserAuthenticator, pool *pgxpool.Pool, m *metrics.Metrics) *http.Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /auth/signup", authHandler.HandleRegister)
@@ -119,9 +122,21 @@ func StartHTTPServer(lc fx.Lifecycle, gameHandler *api.GameHandler, authHandler 
 
 	mux.HandleFunc("GET /swagger/", httpSwagger.WrapHandler)
 
+	mux.Handle("/metrics", promhttp.Handler())
+
+	//mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	//	if err := db.Ping(); err != nil {
+	//		w.WriteHeader(http.StatusServiceUnavailable)
+	//		_, _ = w.Write([]byte(`{"status":"down"}`))
+	//		return
+	//	}
+	//	w.WriteHeader(http.StatusOK)
+	//	_, _ = w.Write([]byte(`{"status":"ok"}`))
+	//})
+
 	srv := &http.Server{
 		Addr:    ":8080",
-		Handler: enableCORS(mux),
+		Handler: enableCORS(api.MetricsMiddleware(m)(mux)),
 	}
 
 	lc.Append(fx.Hook{

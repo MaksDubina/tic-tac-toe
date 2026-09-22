@@ -20,7 +20,9 @@ const (
 )
 
 func NewService(repo GameRepository) *Service {
-	return &Service{repo: repo}
+	return &Service{
+		repo: repo,
+	}
 }
 
 func (s *Service) ValidateBoard(ctx context.Context, current, previous *domain.Game) error {

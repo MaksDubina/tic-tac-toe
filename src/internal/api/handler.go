@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"jwtAuth/src/internal/domain"
+	"jwtAuth/src/internal/metrics"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,15 +15,17 @@ type GameHandler struct {
 	service     GameService
 	authService AuthService
 	jwtExt      JwtRequestExtension
+	metrics     *metrics.Metrics
 }
 
 const AIPlayerUUID = "00000000-0000-0000-0000-000000000000"
 
-func NewGameHandler(s GameService, a AuthService) *GameHandler {
+func NewGameHandler(s GameService, a AuthService, m *metrics.Metrics) *GameHandler {
 	return &GameHandler{
 		service:     s,
 		authService: a,
 		jwtExt:      JwtRequestExtension{},
+		metrics:     m,
 	}
 }
 
@@ -82,6 +85,9 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 		h.sendError(w, "failed to save new game room", http.StatusInternalServerError)
 		return
 	}
+
+	h.metrics.GamesCreatedTotal.Inc()
+	h.metrics.GamesActive.Inc()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -199,6 +205,13 @@ func (h *GameHandler) HandleMove(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.SaveGame(r.Context(), updatedGame); err != nil {
 		h.sendError(w, "failed to save game state", http.StatusInternalServerError)
 		return
+	}
+
+	h.metrics.MovesTotal.Inc()
+
+	switch updatedGame.Status {
+	case domain.XWon, domain.OWon, domain.Draw:
+		h.metrics.GamesActive.Dec()
 	}
 
 	w.Header().Set("Content-Type", "application/json")
